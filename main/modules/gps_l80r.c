@@ -319,9 +319,11 @@ void gps_set_umbral_movimiento(double valor){
 void task_gps_read_and_parse(void *pvParameters)
 {
     uint8_t data[GPS_BUFFER_SIZE];
-    kalman_t kalman_vel;
 
-    kalman_init(&kalman_vel, 0.05, 1.0);
+    //filtro Kalman -> por calibrar -- 
+    //se confiara en la salida del l80R para prubas en campo abierto con buena covertura al cielo
+    //kalman_t kalman_vel;
+    //kalman_init(&kalman_vel, 0.05, 1.0);
 
     while (1) {
         int len = uart_read_bytes(GPS_UART_NUM, data, GPS_BUFFER_SIZE - 1, pdMS_TO_TICKS(100));
@@ -337,12 +339,14 @@ void task_gps_read_and_parse(void *pvParameters)
 
             if (gprmc && nmea_verify_checksum(gprmc)) {
                 if (gps_parse_gprmc(gprmc, &gps) && gps.valid) {
-                    // Ajustar R del Kalman según precisión HDOP
-                    double R_dyn = fmax(0.5, quality.hdop * 0.5);
-                    kalman_vel.R = R_dyn;
 
-                    // Aplicar filtro Kalman
-                    gps.speed_kmh = kalman_update(&kalman_vel, gps.speed_kmh);
+                      // Ajustar R del Kalman según precisión HDOP -- > filtro Kalman DISABLE
+                    //double R_dyn = fmax(0.5, quality.hdop * 0.5);
+                    //kalman_vel.R = R_dyn;
+
+                      // Aplicar filtro Kalman                      --> filtro Kalman DISABLE
+                    //gps.speed_kmh = kalman_update(&kalman_vel, gps.speed_kmh);
+
                     if (gps.speed_kmh < umbral_movimiento_kmh) gps.speed_kmh = 0.0;
 
                     //display_set_number((int16_t)(gps.speed_kmh*100));//(int)gps.speed_kmh
