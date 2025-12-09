@@ -326,7 +326,7 @@ void task_gps_read_and_parse(void *pvParameters)
     //kalman_init(&kalman_vel, 0.05, 1.0);
 
     while (1) {
-        int len = uart_read_bytes(GPS_UART_NUM, data, GPS_BUFFER_SIZE - 1, pdMS_TO_TICKS(100));
+        int len = uart_read_bytes(GPS_UART_NUM, data, GPS_BUFFER_SIZE - 1, pdMS_TO_TICKS(250));
         if (len > 0) {
             data[len] = '\0';
 
