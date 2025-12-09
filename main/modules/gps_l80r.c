@@ -313,52 +313,84 @@ void gps_set_umbral_movimiento(double valor){
     ESP_LOGI(TAG,"🟢 Nuevo umbral de movimiento establecido a %.2f km/h", umbral_movimiento_kmh);
 }
 
+
+// ===========================================================
+//  analiza una línea completa y actualiza los datos del GPS.
+// ===========================================================
+
+static void procesar_sentencia_nmea(const char *linea)
+{
+    if (!nmea_verify_checksum(linea)) {
+        return;
+    }
+
+    if (strncmp(linea, "$GPGGA", 6) == 0) {
+        gps_parse_gpgga(linea, &quality);
+        return;
+    }
+
+    if (strncmp(linea, "$GPRMC", 6) == 0) {
+        if (gps_parse_gprmc(linea, &gps) && gps.valid) {
+
+            if (gps.speed_kmh < umbral_movimiento_kmh) {
+                gps.speed_kmh = 0.0;
+            }
+
+            ESP_LOGI(TAG, "Hora: %s | Vel: %.2f km/h | Lat: %.6f | Lon: %.6f | Alt: %.1f m",gps.time, gps.speed_kmh, gps.latitude, gps.longitude, quality.altitude);
+            ESP_LOGI(TAG, "HDOP: %.2f | Satélites: %d", quality.hdop, quality.satellites);
+
+
+        }
+    }
+}
+
+
 // ===========================================================
 //  TAREA PRINCIPAL DE LECTURA Y PROCESAMIENTO GPS
 // ===========================================================
 void task_gps_read_and_parse(void *pvParameters)
 {
-    uint8_t data[GPS_BUFFER_SIZE];
-
-    //filtro Kalman -> por calibrar -- 
-    //se confiara en la salida del l80R para prubas en campo abierto con buena covertura al cielo
-    //kalman_t kalman_vel;
-    //kalman_init(&kalman_vel, 0.05, 1.0);
+    uint8_t rx_temp[128];           // La lectura actual del UART (fragmento o sentencia)
+    static char nmea_buffer[2048]; // Acumulador de toda la data incompleta y completa
+    static size_t nmea_len = 0;    //Cuántos bytes válidos hay en nmea_buffer
 
     while (1) {
-        int len = uart_read_bytes(GPS_UART_NUM, data, GPS_BUFFER_SIZE - 1, pdMS_TO_TICKS(250));
+
+        int len = uart_read_bytes(GPS_UART_NUM, rx_temp,sizeof(rx_temp) - 1,pdMS_TO_TICKS(50));
+
         if (len > 0) {
-            data[len] = '\0';
 
-            // Buscar tramas GPGGA y GPRMC
-            char *gpgga = strstr((char *)data, "$GPGGA");
-            char *gprmc = strstr((char *)data, "$GPRMC");
-
-            if (gpgga && nmea_verify_checksum(gpgga))
-                gps_parse_gpgga(gpgga, &quality);
-
-            if (gprmc && nmea_verify_checksum(gprmc)) {
-                if (gps_parse_gprmc(gprmc, &gps) && gps.valid) {
-
-                      // Ajustar R del Kalman según precisión HDOP -- > filtro Kalman DISABLE
-                    //double R_dyn = fmax(0.5, quality.hdop * 0.5);
-                    //kalman_vel.R = R_dyn;
-
-                      // Aplicar filtro Kalman                      --> filtro Kalman DISABLE
-                    //gps.speed_kmh = kalman_update(&kalman_vel, gps.speed_kmh);
-
-                    if (gps.speed_kmh < umbral_movimiento_kmh) gps.speed_kmh = 0.0;
-
-                    //display_set_number((int16_t)(gps.speed_kmh*100));//(int)gps.speed_kmh
-                    
-                    ESP_LOGI(TAG, "✅ Valido | HDOP: %.2f | Sat: %d", quality.hdop, quality.satellites);
-                    ESP_LOGI(TAG, "Hora: %s | Vel: %.2f km/h | Lat: %.6f | Lon: %.6f | Alt: %.1f m",
-                             gps.time, gps.speed_kmh, gps.latitude, gps.longitude, quality.altitude);
-                } else {
-                    ESP_LOGW(TAG, "⚠️ GPRMC sin fix válido");
-                }
+            if (nmea_len + len >= sizeof(nmea_buffer) - 1) {
+                nmea_len = 0; // prevenir overflow
             }
+
+            memcpy(&nmea_buffer[nmea_len], rx_temp, len);
+            nmea_len += len;
+            nmea_buffer[nmea_len] = '\0';
+
+            // Procesar líneas completas
+            char *inicio = nmea_buffer;
+            char *nl; //Índice donde termina la sentencia (\n)
+
+            while ((nl = strchr(inicio, '\n')) != NULL) {
+
+                *nl = 0;
+
+                if (nl > inicio && *(nl-1) == '\r') {
+                    *(nl-1) = 0;
+                }
+
+                procesar_sentencia_nmea(inicio);
+
+                inicio = nl + 1;
+            }
+
+            // Compactar el buffer con el resto incompleto
+            size_t resto = strlen(inicio);
+            memmove(nmea_buffer, inicio, resto + 1);
+            nmea_len = resto;
         }
-        vTaskDelay(pdMS_TO_TICKS(10));
+
+        vTaskDelay(pdMS_TO_TICKS(5));
     }
 }
