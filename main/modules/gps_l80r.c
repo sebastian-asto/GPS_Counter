@@ -336,9 +336,8 @@ static void procesar_sentencia_nmea(const char *linea)
                 gps.speed_kmh = 0.0;
             }
 
-            ESP_LOGI(TAG, "Hora: %s | Vel: %.2f km/h | Lat: %.6f | Lon: %.6f | Alt: %.1f m",gps.time, gps.speed_kmh, gps.latitude, gps.longitude, quality.altitude);
             ESP_LOGI(TAG, "HDOP: %.2f | Satélites: %d", quality.hdop, quality.satellites);
-
+            ESP_LOGI(TAG, "Hora: %s | Vel: %.2f km/h | Lat: %.6f | Lon: %.6f | Alt: %.1f m",gps.time, gps.speed_kmh, gps.latitude, gps.longitude, quality.altitude);
 
         }
     }
