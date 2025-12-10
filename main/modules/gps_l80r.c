@@ -21,6 +21,12 @@ static gps_quality_t quality;
 static double umbral_movimiento_kmh = 5.0;// velocidad minima para considerar movimiento
 
 // ===========================================================
+//  CONTADORES PARA DIAGNÓSTICO DEL GPS
+// ===========================================================
+static uint32_t contador_tramas = 0;   // cuántas líneas NMEA llegan
+static uint32_t contador_rmc = 0;      // cuántas RMC llegan
+
+// ===========================================================
 //  CONFIGURACIÓN UART
 // ===========================================================
 void init_uart_gps_l80r(void)
@@ -306,6 +312,12 @@ int gps_get_satellites(void){return quality.satellites;}
 double gps_get_hdop(void){return quality.hdop;}
 bool gps_is_valid(void){return gps.valid;}
 
+// ===========================================================
+// GETTERS DEL DIAGNÓSTICO GPS
+// ===========================================================
+uint32_t gps_get_contador_tramas(void) { return contador_tramas; }
+uint32_t gps_get_contador_rmc(void) { return contador_rmc; }
+
 
 // setters
 void gps_set_umbral_movimiento(double valor){
@@ -318,8 +330,10 @@ void gps_set_umbral_movimiento(double valor){
 //  analiza una línea completa y actualiza los datos del GPS.
 // ===========================================================
 
-static void procesar_sentencia_nmea(const char *linea)
-{
+static void procesar_sentencia_nmea(const char *linea){
+
+    contador_tramas++;
+
     if (!nmea_verify_checksum(linea)) {
         return;
     }
@@ -330,6 +344,7 @@ static void procesar_sentencia_nmea(const char *linea)
     }
 
     if (strncmp(linea, "$GPRMC", 6) == 0) {
+        contador_rmc++;
         if (gps_parse_gprmc(linea, &gps) && gps.valid) {
 
             if (gps.speed_kmh < umbral_movimiento_kmh) {

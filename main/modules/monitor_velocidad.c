@@ -136,29 +136,62 @@ static void alerta_bi_bi(void)
     }
 }
 
+// ===========================================================
+//  FUNCIÓN PARA DIAGNOSTICAR ESTADO DEL GPS
+// ===========================================================
+static bool gps_diagnostico_ok(double vel, bool fix_ok)
+{
+    uint32_t tramas = gps_get_contador_tramas();
+    uint32_t rmc = gps_get_contador_rmc();
 
+    // 1) GPS no conectado
+    if (tramas == 0) {
+        ESP_LOGW("MONITOR_VEL", "🛑 GPS NO CONECTADO (no llegan tramas)");
+        vTaskDelay(pdMS_TO_TICKS(300));
+        return false;
+    }
+
+    // 2) No llegan tramas RMC
+    if (rmc == 0) {
+        ESP_LOGW("MONITOR_VEL", "⚠️ GPS CONECTADO → PERO NO LLEGAN TRAMAS RMC");
+        vTaskDelay(pdMS_TO_TICKS(300));
+        return false;
+    }
+
+    // 3) Hay RMC pero sin FIX válido
+    if (!fix_ok) {
+        ESP_LOGW("MONITOR_VEL", "⚠️ RMC SIN FIX VÁLIDO → Vel %.2f ignorada", vel);
+        vTaskDelay(pdMS_TO_TICKS(200));
+        return false;
+    }
+
+    return true; // Todo está OK
+}
+
+
+// ===========================================================
+//  Task principal
+// ===========================================================
 void task_monitor_velocidad(void *pvParameters)
 {
     leer_contador_guardado_en_nvs();
     display_set_number(contador_eventos);
 
-    while (1) {
-
+    while (1)
+    {
         double vel = gps_get_speed_kmh();
         bool fix_ok = gps_is_valid();
         ultimo_fix_valido = fix_ok;
 
-        if (!fix_ok) {
-            ESP_LOGW(TAG, "Sin FIX → ignorando vel %.2f", vel);
-            vTaskDelay(pdMS_TO_TICKS(200));
+        // DIAGNÓSTICO CENTRALIZADO
+        if (!gps_diagnostico_ok(vel, fix_ok))
             continue;
-        }
 
-        // ============================
-        //  DETECCIÓN DEL EVENTO
-        // ============================
-        if (!estaba_sobre_umbral && vel > umbral_velocidad) {
-
+        // =============================
+        // ESTADO NORMAL (GPS con FIX)
+        // =============================
+        if (!estaba_sobre_umbral && vel > umbral_velocidad)
+        {
             contador_eventos++;
             estaba_sobre_umbral = true;
 
@@ -167,23 +200,22 @@ void task_monitor_velocidad(void *pvParameters)
             guardar_contador_eventos(contador_eventos);
             display_set_number(contador_eventos);
 
-            // Beep inicial
             buzzer_on();
             vTaskDelay(pdMS_TO_TICKS(120));
             buzzer_off();
         }
 
-        // ============================
-        //  ALERTA BI-BI REPETITIVA
-        // ============================
-        if (estaba_sobre_umbral && vel > umbral_velocidad) {
-            alerta_bi_bi();   // ← función modular
+        if (estaba_sobre_umbral && vel > umbral_velocidad)
+        {
+            alerta_bi_bi();
         }
-        else {
+        else
+        {
             estaba_sobre_umbral = false;
         }
 
         vTaskDelay(pdMS_TO_TICKS(40));
     }
 }
+
 

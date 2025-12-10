@@ -72,6 +72,10 @@ int gps_get_satellites(void);
 double gps_get_hdop(void);
 bool gps_is_valid(void);
 
+// GETTERS DE DIAGNÓSTICO GPS
+uint32_t gps_get_contador_tramas(void);
+uint32_t gps_get_contador_rmc(void);
+
 // Configuración de mensajes NMEA
 void gps_set_update_rate_hz(int hz);
 void gps_enable_rmc_gga_only(void);
